@@ -1,0 +1,33 @@
+---
+title: "Redis Beyond Caching"
+description: "Pub/Sub for real-time kitchen displays, sliding-window rate limiting with INCR and EXPIRE, and session patterns that don't fight your auth model."
+date: "2025-10-19"
+tags: ["redis", "websockets", "rate-limiting"]
+---
+
+Redis usually enters a stack as a cache. It tends to stay because of everything else it does well — and three of those uses show up repeatedly in backend systems that need to feel real-time without being over-engineered.
+
+## Pub/Sub for fan-out, not durability
+
+When a kitchen order updates, every connected display for that branch needs to know — immediately, and without polling. Redis Pub/Sub fits this exactly: the API publishes to a channel scoped to the branch, and a WebSocket layer subscribed to that channel pushes the update to every connected client.
+
+The caveat is that Pub/Sub messages aren't durable — a subscriber that's briefly disconnected misses messages published during that gap. For a kitchen display, that's an acceptable trade: on reconnect, the client re-fetches current state, and Pub/Sub resumes handling what changes from there. If you need delivery guarantees, that's a queue, not Pub/Sub.
+
+## Sliding-window rate limiting with two commands
+
+A fixed-window rate limit (100 requests per minute, reset on the minute) lets a client send 100 requests at 0:59 and another 100 at 1:00 — 200 requests in two seconds. A sliding window avoids this, and Redis makes a reasonable approximation cheap:
+
+```
+INCR rate:user:123
+EXPIRE rate:user:123 60 NX
+```
+
+`INCR` increments the counter (creating it at 1 if absent), and `EXPIRE ... NX` sets a 60-second expiry only if one isn't already set. The result: a rolling count that resets 60 seconds after the *first* request in the window, not on a fixed clock boundary. It's not a perfect sliding window, but it closes the burst-at-the-boundary gap with two cheap commands.
+
+## Sessions: store the minimum, key it by something revocable
+
+Redis-backed sessions work best when the session value is small — a user ID, a tenant schema, a permissions version — and the key is something you can delete to force a logout. Storing the entire JWT payload in Redis defeats the point of using a stateless token in the first place; store just enough to answer "is this session still valid" and let the token carry the rest.
+
+## The common thread
+
+Each of these uses Redis for what it's fast at — in-memory fan-out, atomic counters, short-lived key-value lookups — rather than asking it to be a database. That's also why they compose well together: a Pub/Sub channel, a rate-limit counter, and a session key can all live in the same Redis instance without competing for the same kind of attention.

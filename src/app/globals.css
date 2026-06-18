@@ -1,0 +1,114 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+:root {
+  --background: #f7f8fa;
+  --surface: #ffffff;
+  --surface-2: #eef1f5;
+  --border: #dde1e8;
+  --foreground: #11141a;
+  --muted: #5b6270;
+  --accent: #0d9488;
+  --accent-foreground: #f7f8fa;
+  --amber: #b45309;
+  --danger: #b91c1c;
+  --radius: 6px;
+}
+
+.dark {
+  --background: #0a0b0d;
+  --surface: #12141a;
+  --surface-2: #181b22;
+  --border: #232730;
+  --foreground: #e7e9ee;
+  --muted: #8b92a1;
+  --accent: #6ee7b7;
+  --accent-foreground: #0a0b0d;
+  --amber: #f2b544;
+  --danger: #f87171;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-amber: var(--amber);
+  --color-danger: var(--danger);
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Source Code Pro", Menlo, Consolas, "Roboto Mono", monospace;
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+html {
+  color-scheme: dark;
+}
+
+html.light {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: var(--color-accent);
+  color: var(--color-accent-foreground);
+}
+
+/* Subtle dot-grid texture used behind hero / section backgrounds */
+.bg-grid {
+  background-image:
+    radial-gradient(circle at 1px 1px, var(--color-border) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Blinking terminal cursor */
+@keyframes caret-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.caret {
+  animation: caret-blink 1s step-end infinite;
+}
+
+/* Animated SVG path draw */
+@keyframes draw {
+  to { stroke-dashoffset: 0; }
+}
+.draw-path {
+  stroke-dasharray: 6 6;
+  stroke-dashoffset: 240;
+  animation: draw 6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.prose-invert-custom {
+  --tw-prose-body: var(--color-muted);
+  --tw-prose-headings: var(--color-foreground);
+  --tw-prose-links: var(--color-accent);
+  --tw-prose-bold: var(--color-foreground);
+  --tw-prose-code: var(--color-foreground);
+  --tw-prose-quotes: var(--color-foreground);
+  --tw-prose-quote-borders: var(--color-border);
+  --tw-prose-hr: var(--color-border);
+  --tw-prose-bullets: var(--color-muted);
+}

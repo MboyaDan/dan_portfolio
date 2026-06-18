@@ -1,0 +1,36 @@
+---
+title: "Multi-Tenant SaaS in Go"
+description: "Schema-per-tenant isolation, JWT scoped claims, and RBAC that doesn't need a database round trip to answer 'can this user do this?'"
+date: "2026-01-22"
+tags: ["go", "multi-tenant", "postgresql"]
+---
+
+Most multi-tenant advice starts with a choice between "one database per tenant" and "one big shared table with a tenant_id column." Both work, but they trade operational simplicity for query-time safety in different directions. The approach that has held up best in practice sits in between: one PostgreSQL instance, one schema per tenant.
+
+## Why schema-per-tenant
+
+A `tenant_id` column on every table is cheap to set up but expensive to get right — every query, every migration, every index needs that column, and a single missing `WHERE tenant_id = $1` is a data leak. Schema-per-tenant moves that boundary up a level: the connection itself is scoped to a schema via `SET search_path`, so a query written without any tenant awareness still can't see another tenant's rows.
+
+The operational cost is real — migrations run once per schema — but it's a cost you pay at deploy time, not at every request.
+
+## Resolving the tenant before the handler runs
+
+The tenant identifier lives in the JWT, set at login and refreshed via rotation. A middleware step resolves the schema name from the token claims and sets it on the request context before any handler logic runs:
+
+```go
+func TenantMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        claims := claimsFromContext(r.Context())
+        ctx := context.WithValue(r.Context(), tenantSchemaKey, claims.TenantSchema)
+        next.ServeHTTP(w, r.WithContext(ctx))
+    })
+}
+```
+
+Every downstream query uses this context value to set `search_path` on its connection — so the handler code itself never needs to know which tenant it's serving.
+
+## RBAC as a claims-encoded permissions map
+
+Role checks don't need a database lookup if the permission set is small and changes infrequently. Encode a permissions map directly in the JWT claims at issuance — `{"orders:write": true, "branches": ["nairobi-cbd"]}` — and check it in-process. Refresh-token rotation handles the case where permissions change: the next refresh picks up the new map.
+
+The cost of this approach is that permission changes don't take effect until the next refresh. For most operational roles, that delay (minutes, not hours) is an acceptable trade for removing a database call from every authorized request.

@@ -1,0 +1,33 @@
+---
+title: "Designing Idempotent Payment Systems"
+description: "How to make M-Pesa Daraja callbacks safe to retry, reorder, and duplicate — without double-charging anyone."
+date: "2026-02-14"
+tags: ["payments", "go", "postgresql"]
+---
+
+Mobile money integrations look simple in the happy path: request a payment, wait for a callback, mark the order paid. The problem is that the happy path is not the only path. Daraja callbacks can arrive late, arrive twice, or arrive in a different order than the requests that triggered them — and a payment system that assumes otherwise will eventually double-charge someone.
+
+## Start with an idempotency key, not a transaction ID
+
+Before calling the payment provider, generate a key tied to the *intent* — the order, the cart, the invoice — not the provider's transaction ID, which doesn't exist yet. Store this key alongside the order in a pending state. Every retry of the same intent reuses the same key.
+
+## Treat the callback as an upsert, not an insert
+
+When the callback arrives, the temptation is to `INSERT` a payment record and update the order status in two separate statements. That gap is where duplicates live. Instead, structure the write as a single atomic upsert keyed on the idempotency key: if a payment record already exists for that key, the second callback updates nothing meaningful and exits early.
+
+```sql
+INSERT INTO payments (idempotency_key, order_id, status, amount)
+VALUES ($1, $2, 'completed', $3)
+ON CONFLICT (idempotency_key) DO NOTHING
+RETURNING id;
+```
+
+If no row is returned, you already processed this payment — log it and stop.
+
+## Verify the signature before you trust the body
+
+Daraja webhooks should carry a signature you can verify against a shared secret. Don't skip this because "it's just our own callback URL" — anyone who finds that URL can replay a payload otherwise. Signature verification happens before the upsert, not after.
+
+## What this buys you
+
+With these three pieces in place — a stable idempotency key, an atomic upsert, and signature verification — retries, duplicates, and out-of-order delivery all collapse to the same outcome: one payment, recorded once, regardless of how many times the network decided to be unreliable.

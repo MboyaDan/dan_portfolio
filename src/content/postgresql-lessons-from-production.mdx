@@ -1,0 +1,33 @@
+---
+title: "PostgreSQL Lessons From Production"
+description: "EXPLAIN ANALYZE habits, partial indexes that actually get used, and running Alembic migrations without locking your tables."
+date: "2025-12-08"
+tags: ["postgresql", "performance"]
+---
+
+A query that's fast in development with a thousand rows can fall over in production with ten million. The gap between those two environments is where most PostgreSQL lessons live.
+
+## Read EXPLAIN ANALYZE for what it does, not what you expect
+
+`EXPLAIN ANALYZE` shows the actual plan and actual row counts, not estimates. The most common surprise is a sequential scan where you expected an index scan — usually because the planner's row-count estimate is wrong, often after a bulk load that hasn't been `ANALYZE`d yet. Before tuning indexes, run `ANALYZE` on the table and re-check the plan. Half the "missing index" problems are actually stale statistics.
+
+## Partial indexes for the query you actually run
+
+A full index on `status` is wasted space if 95% of rows are `completed` and your hot query only ever looks for `pending`. A partial index —
+
+```sql
+CREATE INDEX idx_orders_pending ON orders (created_at)
+WHERE status = 'pending';
+```
+
+— stays small, stays fast, and the planner will use it automatically when the query's `WHERE` clause matches the index's predicate. This matters most on tables that accumulate history: most rows are "done," and the index should reflect that.
+
+## Migrations without locking the table
+
+`ALTER TABLE ... ADD COLUMN ... NOT NULL DEFAULT` used to rewrite the whole table under a lock. Modern Postgres handles constant defaults without a rewrite, but adding an index is still a different story — `CREATE INDEX` takes a lock that blocks writes for its duration.
+
+The fix is `CREATE INDEX CONCURRENTLY`, which builds the index without blocking writes, at the cost of taking longer and not running inside a transaction block. Alembic supports this via `postgresql_concurrently=True` on the operation, but it requires running that migration outside Alembic's default transactional wrapper — worth checking before you assume a migration is "safe" just because it ran fine locally.
+
+## The habit that matters most
+
+None of these techniques matter if they're applied after something is already slow in production. The habit that pays off is running `EXPLAIN ANALYZE` on any query touching a table over a few hundred thousand rows *before* it ships — not as a one-time audit, but as part of writing the query.

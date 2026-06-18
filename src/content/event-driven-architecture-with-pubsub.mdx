@@ -1,0 +1,39 @@
+---
+title: "Event-Driven Architecture With Pub/Sub"
+description: "Decoupling order ingestion from analytics processing on GCP — and the partitioning decisions that keep BigQuery queries cheap."
+date: "2025-11-03"
+tags: ["gcp", "pub/sub", "bigquery", "event-driven"]
+---
+
+The order-taking path and the reporting path have very different requirements. One needs to respond in milliseconds and never fail silently. The other can tolerate a few seconds of delay and benefits from batching. Trying to serve both from the same request path means the slower one eventually drags down the faster one.
+
+## Publish the event, don't call the reporting service
+
+When an order is placed, the API publishes an event to a Pub/Sub topic and returns — it does not wait for that event to be processed. A separate Cloud Run service subscribes to the topic and writes to BigQuery on its own schedule. If the analytics service is slow, redeploying, or temporarily down, order-taking is unaffected; Pub/Sub holds the messages until the subscriber catches up.
+
+```go
+func publishOrderEvent(ctx context.Context, topic *pubsub.Topic, order Order) error {
+    data, _ := json.Marshal(order)
+    result := topic.Publish(ctx, &pubsub.Message{Data: data})
+    _, err := result.Get(ctx) // confirms publish, not processing
+    return err
+}
+```
+
+## Partition by the column you'll filter on
+
+BigQuery tables that grow without partitioning eventually mean every query scans the whole table. Partitioning by the event's date column — the column nearly every revenue or volume query filters on — means a "last 7 days" query only touches seven partitions, regardless of how many years of history the table holds.
+
+```sql
+CREATE TABLE analytics.order_events (
+  order_id STRING,
+  branch_id STRING,
+  amount NUMERIC,
+  occurred_at TIMESTAMP
+)
+PARTITION BY DATE(occurred_at);
+```
+
+## Decoupling is a correctness property, not just a performance one
+
+The instinct is to think of this as a performance optimization — and it is — but the more important property is correctness under failure. A synchronous call to an analytics service that occasionally times out becomes, eventually, an order that occasionally fails to place for reasons that have nothing to do with the order itself. Pub/Sub turns "the reporting system is having a bad day" from an incident into a non-event.

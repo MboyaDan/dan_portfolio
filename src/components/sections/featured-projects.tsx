@@ -4,6 +4,7 @@ import { projects } from "@/data/projects";
 import { SectionLabel } from "@/components/ui/section-label";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ProjectStatusBadge } from "@/components/ui/project-status";
 
 export function FeaturedProjects() {
   const featured = projects.filter((p) => p.featured);
@@ -21,6 +22,7 @@ export function FeaturedProjects() {
                   <ArrowUpRight className="h-4 w-4 shrink-0 text-muted transition-colors group-hover:text-accent" />
                 </div>
                 <p className="mt-1 font-mono text-xs text-accent">{project.tagline}</p>
+                <ProjectStatusBadge status={project.status} className="mt-3" />
                 <p className="mt-3 text-sm leading-relaxed text-muted">{project.summary}</p>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">

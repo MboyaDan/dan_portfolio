@@ -12,6 +12,7 @@ import {
   User,
 } from "lucide-react";
 import { site } from "@/data/site";
+import { projects } from "@/data/projects";
 import { LinkedinIcon } from "@/components/ui/linkedin-icon";
 import { GithubIcon } from "@/components/ui/github-icon";
 import type { PostMeta } from "@/lib/mdx";
@@ -89,6 +90,18 @@ export function CommandPalette({ posts }: CommandPaletteProps) {
             <Item onSelect={() => go("/contact")} icon={<Mail className="h-4 w-4" />}>
               Contact
             </Item>
+          </Command.Group>
+
+          <Command.Group heading="Case studies" className="text-xs text-muted px-2 py-1.5 font-mono uppercase tracking-wider">
+            {projects.map((project) => (
+              <Item
+                key={project.slug}
+                onSelect={() => go(`/work/${project.slug}`)}
+                icon={<FolderGit2 className="h-4 w-4" />}
+              >
+                {project.name}
+              </Item>
+            ))}
           </Command.Group>
 
           {posts.length > 0 && (
